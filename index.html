@@ -51,4 +51,212 @@
             <i class="fa-solid fa-magnifying-glass text-gray-300 cursor-pointer hover:text-white"></i>
             <span class="cursor-pointer text-gray-300 hover:text-white">Ngôn ngữ (VI)</span>
             <span class="cursor-pointer text-gray-300 hover:text-white flex items-center gap-1" onclick="alert('Lịch sử đã được xóa theo yêu cầu của bạn.')">
-                <i class="fa-solid fa-clock-
+                <i class="fa-solid fa-clock-rotate-left"></i> Lịch sử đọc
+            </span>
+            <button class="border border-gray-500 rounded px-4 py-1.5 hover:bg-white/10 transition">Đăng nhập</button>
+            <button class="bg-accent rounded px-4 py-1.5 text-white font-medium hover:bg-teal-600 transition">Bắt đầu ngay</button>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="max-w-5xl mx-auto px-6 pt-16">
+        
+        <!-- Hero Section -->
+        <div class="mb-10">
+            <div class="text-accent font-bold text-sm tracking-wider uppercase flex items-center gap-2 mb-3">
+                <i class="fa-solid fa-circle text-[8px]"></i>
+                Trợ lý đọc dành cho học sinh
+            </div>
+            <h1 class="text-5xl font-extrabold text-primary leading-tight mb-4">
+                Gợi ý sách đúng trình độ, <span class="text-accent">đúng lứa tuổi</span>
+            </h1>
+            <div class="flex justify-between items-end">
+                <p class="text-gray-500 text-lg max-w-lg">
+                    Nói cho mình biết bạn đang muốn đọc gì. Mình sẽ tìm những cuốn vừa sức, thú vị và mở ra thêm những chân trời mới.
+                </p>
+                <div class="flex items-center gap-2 text-sm text-primary font-semibold bg-white px-3 py-1.5 rounded-full shadow-sm">
+                    <i class="fa-solid fa-leaf text-accent"></i>
+                    <span>Học theo sở thích • Đọc để khám phá</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Search Box Area -->
+        <div class="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm mb-6">
+            <div class="flex justify-between items-center mb-4">
+                <div class="flex items-center gap-2 text-primary font-bold">
+                    <i class="fa-regular fa-comment-dots text-accent text-lg"></i>
+                    <span>Hôm nay bạn muốn đọc gì?</span>
+                </div>
+                <div class="text-xs text-accent bg-teal-50 px-2 py-1 rounded flex items-center gap-1 font-medium">
+                    <i class="fa-solid fa-shield-halved"></i>
+                    Không cần tài khoản
+                </div>
+            </div>
+
+            <div class="flex items-center border border-gray-300 rounded-xl p-2 pl-4 focus-within:border-accent focus-within:ring-1 focus-within:ring-accent transition mb-4">
+                <input type="text" id="searchInput" class="flex-1 outline-none text-gray-700 bg-transparent" placeholder="Tìm sách trinh thám ngắn gọn, dễ đọc cho người mới" value="Tìm sách trinh thám ngắn gọn, dễ đọc cho người mới">
+                <div class="flex items-center gap-3 pr-2">
+                    <i class="fa-solid fa-microphone text-gray-400 cursor-pointer hover:text-accent"></i>
+                    <button id="searchBtn" class="bg-accent text-white w-10 h-10 rounded-full flex items-center justify-center hover:bg-teal-600 transition shadow-md">
+                        <i class="fa-solid fa-arrow-right"></i>
+                    </button>
+                </div>
+            </div>
+
+            <div class="flex items-center justify-between pt-2 border-t border-gray-100">
+                <div class="text-sm text-gray-500">
+                    <span class="font-semibold text-gray-700">Lọc gợi ý</span> <br> 
+                    <span class="text-xs">Tùy chỉnh để kết quả phù hợp hơn</span>
+                </div>
+                <div class="flex gap-3">
+                    <button class="flex items-center gap-2 px-3 py-1.5 border border-gray-200 rounded-md text-sm text-gray-600 hover:bg-gray-50">
+                        Độ tuổi <strong class="text-gray-800">13–15 tuổi</strong> <i class="fa-solid fa-chevron-down text-xs"></i>
+                    </button>
+                    <button class="flex items-center gap-2 px-3 py-1.5 border border-gray-200 rounded-md text-sm text-gray-600 hover:bg-gray-50">
+                        Trình độ đọc <strong class="text-gray-800">Đang làm quen</strong> <i class="fa-solid fa-chevron-down text-xs"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Privacy Notice -->
+        <div class="flex justify-center mb-16">
+            <div class="flex items-start gap-2 max-w-xl text-center">
+                <i class="fa-solid fa-shield-check text-accent mt-1"></i>
+                <div class="text-sm text-gray-500">
+                    <strong class="text-primary block mb-0.5"><i class="fa-regular fa-circle-check text-accent mr-1"></i> Ẩn danh • Đã lọc nội dung theo độ tuổi</strong>
+                    Dữ liệu của bạn chỉ được dùng để gợi ý sách và sẽ không chia sẻ cho bên thứ ba.
+                </div>
+            </div>
+        </div>
+
+        <!-- Results Section (Hidden by default, shown after clicking search) -->
+        <div id="resultsSection" class="hidden-section">
+            <div class="text-accent font-bold text-sm tracking-wider uppercase flex items-center gap-2 mb-2">
+                <i class="fa-solid fa-wand-magic-sparkles"></i>
+                Gợi ý dành riêng cho bạn
+            </div>
+            <div class="flex items-end justify-between mb-8">
+                <div>
+                    <h2 class="text-3xl font-semibold text-primary mb-2">Danh sách cân bằng</h2>
+                    <p class="text-sm text-gray-500 mb-2">Dựa trên mong muốn: <strong>"Tìm sách trinh thám ngắn gọn, dễ đọc cho người mới"</strong></p>
+                    <div class="flex items-center gap-1.5 text-accent text-sm">
+                        <i class="fa-regular fa-lightbulb"></i>
+                        Mình đã cân bằng các lựa chọn quen thuộc với một vài cuốn sách mới để bạn khám phá.
+                    </div>
+                </div>
+                <div class="flex gap-2 text-sm font-semibold border border-gray-200 rounded-md overflow-hidden bg-white shadow-sm">
+                    <div class="px-3 py-1.5 bg-gray-50 text-accent"><span class="text-primary font-bold">50%</span> cùng gu</div>
+                    <div class="px-3 py-1.5 bg-white text-accent"><span class="text-primary font-bold">50%</span> mở rộng</div>
+                </div>
+            </div>
+
+            <div class="grid md:grid-cols-2 gap-8">
+                <!-- Cùng Gu Column -->
+                <div>
+                    <div class="flex items-center justify-between border-b-2 border-gray-200 pb-3 mb-5">
+                        <div class="flex items-center gap-3">
+                            <div class="bg-blue-50 p-2 rounded text-blue-600"><i class="fa-solid fa-book-open"></i></div>
+                            <div>
+                                <h3 class="text-lg font-semibold text-gray-800">Cùng gu</h3>
+                                <p class="text-xs text-gray-500">Những cuốn bạn có thể bắt đầu ngay</p>
+                            </div>
+                        </div>
+                        <span class="text-sm font-bold text-gray-300">03</span>
+                    </div>
+
+                    <!-- Book Card 1 -->
+                    <div class="bg-white p-5 rounded-xl border border-gray-200 shadow-sm mb-4 hover:shadow-md transition">
+                        <h4 class="font-bold text-primary text-lg mb-1">Sherlock Holmes (Tuyển tập truyện ngắn)</h4>
+                        <p class="text-sm text-gray-500 mb-3">Tác giả: Arthur Conan Doyle</p>
+                        
+                        <div class="bg-gray-50 p-3 rounded-lg mb-4">
+                            <p class="text-xs font-semibold text-primary mb-2">Tại sao cuốn này hợp với bạn?</p>
+                            <ul class="text-sm text-gray-600 space-y-1.5 list-disc pl-4">
+                                <li><strong>Nội dung:</strong> Các vụ án ngắn, nhịp độ nhanh, không bị lê thê.</li>
+                                <li><strong>Độ dễ đọc:</strong> Lời văn kinh điển nhưng cực kỳ cuốn hút, rất tốt cho người mới bắt đầu đọc trinh thám.</li>
+                                <li><strong>Phù hợp:</strong> Độ tuổi 13+ vì không có tình tiết quá bạo lực.</li>
+                            </ul>
+                        </div>
+                        
+                        <div class="flex items-center gap-2">
+                            <span class="text-xs text-gray-400 mr-2">Đánh giá gợi ý này:</span>
+                            <button class="px-3 py-1 bg-gray-100 hover:bg-accent hover:text-white text-gray-600 rounded text-xs font-medium transition"><i class="fa-regular fa-thumbs-up mr-1"></i> Hữu ích</button>
+                            <button class="px-3 py-1 bg-gray-100 hover:bg-red-500 hover:text-white text-gray-600 rounded text-xs font-medium transition"><i class="fa-regular fa-thumbs-down mr-1"></i> Không phù hợp</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Mở rộng Column -->
+                <div>
+                    <div class="flex items-center justify-between border-b-2 border-gray-200 pb-3 mb-5">
+                        <div class="flex items-center gap-3">
+                            <div class="bg-teal-50 p-2 rounded text-accent"><i class="fa-regular fa-compass"></i></div>
+                            <div>
+                                <h3 class="text-lg font-semibold text-gray-800">Mở rộng</h3>
+                                <p class="text-xs text-gray-500">Gợi ý để thử một điều mới</p>
+                            </div>
+                        </div>
+                        <span class="text-sm font-bold text-gray-300">02</span>
+                    </div>
+
+                    <!-- Book Card 2 -->
+                    <div class="bg-white p-5 rounded-xl border border-gray-200 shadow-sm mb-4 hover:shadow-md transition">
+                        <div class="flex items-center justify-between mb-1">
+                            <h4 class="font-bold text-primary text-lg">Chuyện Con Mèo Dạy Hải Âu Bay</h4>
+                            <span class="text-xs bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded font-medium">Văn học</span>
+                        </div>
+                        <p class="text-sm text-gray-500 mb-3">Tác giả: Luis Sepúlveda</p>
+                        
+                        <div class="bg-gray-50 p-3 rounded-lg mb-4">
+                            <p class="text-xs font-semibold text-primary mb-2">Tại sao cuốn này hợp với bạn?</p>
+                            <ul class="text-sm text-gray-600 space-y-1.5 list-disc pl-4">
+                                <li><strong>Nội dung:</strong> Dù không phải trinh thám, nhưng cách giải quyết vấn đề của chú mèo Zorba cũng kịch tính không kém.</li>
+                                <li><strong>Độ dễ đọc:</strong> Ngắn gọn, ấm áp, văn phong rất dễ cảm thụ.</li>
+                                <li><strong>Phù hợp:</strong> Giúp bạn "đổi gió" sang dòng văn học nhẹ nhàng nhưng ý nghĩa.</li>
+                            </ul>
+                        </div>
+                        
+                        <div class="flex items-center gap-2">
+                            <span class="text-xs text-gray-400 mr-2">Đánh giá gợi ý này:</span>
+                            <button class="px-3 py-1 bg-gray-100 hover:bg-accent hover:text-white text-gray-600 rounded text-xs font-medium transition"><i class="fa-regular fa-thumbs-up mr-1"></i> Hữu ích</button>
+                            <button class="px-3 py-1 bg-gray-100 hover:bg-red-500 hover:text-white text-gray-600 rounded text-xs font-medium transition"><i class="fa-regular fa-thumbs-down mr-1"></i> Không phù hợp</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Simple Interactivity Script -->
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const searchBtn = document.getElementById('searchBtn');
+            const searchInput = document.getElementById('searchInput');
+            const resultsSection = document.getElementById('resultsSection');
+
+            const performSearch = () => {
+                if(searchInput.value.trim() !== "") {
+                    // Show a simple loading state on button
+                    searchBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
+                    searchBtn.classList.add('opacity-80');
+                    
+                    // Mock API delay
+                    setTimeout(() => {
+                        searchBtn.innerHTML = '<i class="fa-solid fa-arrow-right"></i>';
+                        searchBtn.classList.remove('opacity-80');
+                        resultsSection.style.display = 'block';
+                        resultsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }, 800);
+                }
+            };
+
+            searchBtn.addEventListener('click', performSearch);
+            searchInput.addEventListener('keypress', (e) => {
+                if(e.key === 'Enter') performSearch();
+            });
+        });
+    </script>
+</body>
+</html>
