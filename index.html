@@ -1,500 +1,54 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { initializeApp } from 'firebase/app';
-import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from 'firebase/auth';
-import { getFirestore, collection, addDoc, getDocs, deleteDoc, query, onSnapshot, doc, orderBy } from 'firebase/firestore';
-import { User, Book, Trash2, Send, ThumbsUp, ThumbsDown, ShieldCheck, History, X, Search, Globe, MessageSquare, Mic, ArrowRight, Sparkles, Compass, Leaf, BookOpen } from 'lucide-react';
-import { v4 as uuidv4 } from 'uuid';
-
-// --- Firebase Initialization ---
-const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
-    // Dummy config for fallback if environment variable is missing
-    apiKey: "dummy-api-key",
-    authDomain: "dummy-auth-domain",
-    projectId: "dummy-project-id",
-};
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'book-recommendation-app';
-
-// --- Gemini API Call ---
-const generateBookRecommendations = async (prompt, age, readingLevel) => {
-    const apiKey = ""; // Canvas will automatically provide the API key
-    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`;
-
-    const systemInstruction = `
-    Bạn là một trợ lý ảo chuyên gợi ý sách cho học sinh. Nhiệm vụ của bạn là đọc yêu cầu của người dùng và trả về một danh sách gồm CHÍNH XÁC 5 quyển sách.
-    Yêu cầu quan trọng:
-    1. Tuyệt đối KHÔNG gợi ý nội dung không phù hợp với lứa tuổi (${age}) và trình độ đọc (${readingLevel}).
-    2. Danh sách 5 quyển sách phải cân bằng: khoảng 2-3 quyển đúng với sở thích người dùng mô tả, và 2-3 quyển mở rộng sang lĩnh vực mới (văn học, khoa học, lịch sử, kỹ năng...).
-    3. Định dạng đầu ra phải là JSON hợp lệ theo schema sau:
-    {
-      "books": [
-        {
-          "title": "Tên sách",
-          "author": "Tác giả",
-          "category": "cùng gu" hoặc "mở rộng",
-          "reasons": ["Lý do 1 (nội dung chính)", "Lý do 2 (mức độ dễ đọc)", "Lý do 3 (đối tượng phù hợp)"] 
-        }
-      ]
-    }
-    Lưu ý: Chỉ trả về JSON, không thêm bất kỳ văn bản nào khác. Mức độ ưu tiên cho category: 3 cuốn "cùng gu", 2 cuốn "mở rộng".
-    `;
-
-    const payload = {
-        contents: [{ parts: [{ text: `Độ tuổi: ${age}, Trình độ đọc: ${readingLevel}. Yêu cầu: ${prompt}` }] }],
-        systemInstruction: { parts: [{ text: systemInstruction }] },
-        generationConfig: {
-            responseMimeType: "application/json",
-        }
-    };
-
-    try {
-        const response = await fetch(apiUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        });
-        const result = await response.json();
-        if (result.candidates && result.candidates.length > 0 && result.candidates[0].content && result.candidates[0].content.parts.length > 0) {
-            const jsonStr = result.candidates[0].content.parts[0].text;
-            return JSON.parse(jsonStr);
-        }
-        throw new Error("Không thể tạo gợi ý lúc này.");
-    } catch (error) {
-        console.error("Gemini API Error:", error);
-        return null;
-    }
-};
-
-export default function App() {
-    const [user, setUser] = useState(null);
-    const [age, setAge] = useState('13-15 tuổi');
-    const [readingLevel, setReadingLevel] = useState('Đang làm quen');
-    
-    const [chatInput, setChatInput] = useState('');
-    const [chatHistory, setChatHistory] = useState([]); 
-    const [isLoading, setIsLoading] = useState(false);
-    
-    const [savedHistory, setSavedHistory] = useState([]);
-    const [showHistoryModal, setShowHistoryModal] = useState(false);
-
-    const chatEndRef = useRef(null);
-
-    useEffect(() => {
-        const initAuth = async () => {
-            try {
-                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                    await signInWithCustomToken(auth, __initial_auth_token);
-                } else {
-                    await signInAnonymously(auth);
-                }
-            } catch (error) {
-                console.error("Auth error:", error);
-            }
-        };
-        initAuth();
-
-        const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-            setUser(currentUser);
-        });
-        return () => unsubscribe();
-    }, []);
-
-    useEffect(() => {
-        if (!user) return;
-        
-        // Fetch history
-        const historyRef = collection(db, 'artifacts', appId, 'users', user.uid, 'book_history');
-        const q = query(historyRef); // No orderBy to avoid needing indexes initially
-        
-        const unsubscribe = onSnapshot(q, (snapshot) => {
-            const history = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            // Sort in memory (newest first based on a timestamp if we add one, for now just reverse array)
-            setSavedHistory(history.reverse());
-        }, (error) => {
-             console.error("Error fetching history:", error);
-        });
-
-        return () => unsubscribe();
-    }, [user]);
-
-    useEffect(() => {
-        chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }, [chatHistory, isLoading]);
-
-    const handleStart = () => {
-        setIsConfigured(true);
-        setChatHistory([{ type: 'bot', text: `Chào bạn! Mình đã ghi nhận độ tuổi ${age} và trình độ đọc ${readingLevel}. Bạn muốn tìm sách như thế nào hôm nay? (Ví dụ: "Tìm truyện trinh thám không quá đáng sợ")` }]);
-    };
-
-    const handleSendMessage = async (e) => {
-        e.preventDefault();
-        if (!chatInput.trim() || isLoading) return;
-
-        const userPrompt = chatInput.trim();
-        setChatInput('');
-        setChatHistory(prev => [...prev, { type: 'user', text: userPrompt }]);
-        setIsLoading(true);
-
-        const recommendations = await generateBookRecommendations(userPrompt, age, readingLevel);
-        
-        setIsLoading(false);
-        if (recommendations && recommendations.books) {
-            const batchId = uuidv4();
-            setChatHistory(prev => [...prev, { type: 'bot', data: recommendations, id: batchId }]);
-            
-            // Save to history automatically
-            if (user) {
-                try {
-                     const historyRef = collection(db, 'artifacts', appId, 'users', user.uid, 'book_history');
-                     await addDoc(historyRef, {
-                         timestamp: new Date().toISOString(),
-                         prompt: userPrompt,
-                         books: recommendations.books
-                     });
-                } catch(err) {
-                    console.error("Error saving history", err);
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trang Kế Tiếp - Gợi ý sách cho học sinh</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#0D2B36', // Màu xanh đen navbar
+                        accent: '#198083', // Màu xanh lá/teal cho nút bấm
+                        bglight: '#FAFAFA'
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    }
                 }
             }
-        } else {
-             setChatHistory(prev => [...prev, { type: 'bot', text: 'Xin lỗi, mình gặp lỗi khi tìm sách. Bạn thử lại nhé!' }]);
         }
-    };
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; background-color: #FAFAFA; }
+        .hidden-section { display: none; }
+    </style>
+</head>
+<body class="text-gray-800 pb-20">
 
-    const handleFeedback = (batchId, type) => {
-        // In a real app, this would log telemetry. For now, just show visual feedback.
-        setChatHistory(prev => prev.map(msg => {
-            if (msg.id === batchId) {
-                return { ...msg, feedback: type };
-            }
-            return msg;
-        }));
-    };
-
-    const handleClearHistory = async () => {
-        if (!user) return;
-        try {
-            const historyRef = collection(db, 'artifacts', appId, 'users', user.uid, 'book_history');
-            const snapshot = await getDocs(historyRef);
-            const deletePromises = snapshot.docs.map(docSnapshot => deleteDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'book_history', docSnapshot.id)));
-            await Promise.all(deletePromises);
-            setChatHistory([]);
-            setShowHistoryModal(false);
-        } catch (error) {
-            console.error("Error clearing history:", error);
-        }
-    };
-
-    return (
-        <div className="min-h-screen bg-[#F8FAFC] flex flex-col font-sans text-slate-800">
-            {/* Header */}
-            <header className="bg-[#0F172A] text-white">
-                <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
-                    <div className="flex items-center gap-8">
-                        <div className="flex items-center gap-2 text-teal-400 font-bold text-xl">
-                            <div className="bg-teal-500 text-white p-1 rounded-md">
-                                <BookOpen size={20} />
-                            </div>
-                            <span className="text-white tracking-wide">Trang Kế Tiếp</span>
-                        </div>
-                        <nav className="hidden md:flex gap-6 text-sm font-medium text-slate-300 h-full">
-                            <a href="#" className="text-white border-b-2 border-teal-500 h-16 flex items-center">Khám phá</a>
-                            <a href="#" className="hover:text-white h-16 flex items-center transition-colors">Lớp học</a>
-                            <a href="#" className="hover:text-white h-16 flex items-center transition-colors">Cộng đồng</a>
-                            <a href="#" className="hover:text-white h-16 flex items-center transition-colors">Hỗ trợ</a>
-                        </nav>
-                    </div>
-                    <div className="flex items-center gap-5 text-sm font-medium text-slate-300">
-                        <Search size={18} className="cursor-pointer hover:text-white" />
-                        <div className="hidden lg:flex items-center gap-1.5 cursor-pointer hover:text-white">
-                            <Globe size={16} /> Ngôn ngữ (VI)
-                        </div>
-                        <button 
-                            onClick={() => setShowHistoryModal(true)}
-                            className="hidden lg:flex items-center gap-1.5 cursor-pointer hover:text-white"
-                        >
-                            <History size={16} /> Lịch sử đọc
-                        </button>
-                        <div className="flex items-center gap-3 ml-2">
-                            <button className="px-4 py-2 rounded border border-slate-600 hover:bg-slate-800 transition-colors text-white">
-                                Đăng nhập
-                            </button>
-                            <button className="px-4 py-2 rounded bg-teal-600 hover:bg-teal-500 transition-colors text-white">
-                                Bắt đầu ngay
-                            </button>
-                        </div>
-                    </div>
+    <!-- Navbar -->
+    <header class="bg-primary text-white py-3 px-6 flex items-center justify-between shadow-sm">
+        <div class="flex items-center gap-8">
+            <div class="flex items-center gap-2 font-bold text-xl cursor-pointer">
+                <div class="bg-accent p-1.5 rounded text-white flex items-center justify-center">
+                    <i class="fa-solid fa-book-open text-sm"></i>
                 </div>
-            </header>
-
-            <main className="flex-1 max-w-5xl mx-auto w-full px-6 py-12 flex flex-col gap-10">
-                {/* Hero Section */}
-                <div className="flex justify-between items-start">
-                    <div className="max-w-2xl">
-                        <div className="flex items-center gap-2 text-teal-700 font-bold text-xs uppercase tracking-wider mb-4">
-                            <div className="w-2 h-2 rounded-full bg-teal-600"></div>
-                            Trợ lý đọc dành cho học sinh
-                        </div>
-                        <h1 className="text-4xl md:text-5xl font-extrabold text-slate-900 leading-tight mb-4">
-                            Gợi ý sách đúng trình độ, <span className="text-teal-700">đúng lứa tuổi</span>
-                        </h1>
-                        <p className="text-slate-600 text-lg leading-relaxed">
-                            Nói cho mình biết bạn đang muốn đọc gì. Mình sẽ tìm những cuốn vừa sức, thú vị và mở ra thêm những chân trời mới.
-                        </p>
-                    </div>
-                    <div className="hidden md:flex flex-col items-start gap-1 bg-white p-4 rounded-xl shadow-sm border border-slate-100">
-                        <div className="flex items-center gap-2 text-teal-700 text-sm font-semibold">
-                            <Leaf size={16} /> Học theo sở thích
-                        </div>
-                        <div className="text-slate-900 font-bold">Đọc để khám phá</div>
-                    </div>
-                </div>
-
-                {/* Input Card */}
-                <div>
-                    <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-                        <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center">
-                            <div className="flex items-center gap-2 text-slate-800 font-bold">
-                                <MessageSquare size={18} className="text-teal-600" />
-                                Hôm nay bạn muốn đọc gì?
-                            </div>
-                            <div className="flex items-center gap-1.5 bg-teal-50 text-teal-700 px-3 py-1 rounded-full text-xs font-semibold">
-                                <ShieldCheck size={14} /> Không cần tài khoản
-                            </div>
-                        </div>
-                        
-                        <div className="p-6 pb-2">
-                            <form onSubmit={handleSendMessage} className="flex items-center gap-4 relative">
-                                <textarea
-                                    value={chatInput}
-                                    onChange={(e) => setChatInput(e.target.value)}
-                                    onKeyDown={(e) => {
-                                        if (e.key === 'Enter' && !e.shiftKey) {
-                                            e.preventDefault();
-                                            handleSendMessage(e);
-                                        }
-                                    }}
-                                    placeholder="Tìm sách trinh thám ngắn gọn, dễ đọc cho người mới..."
-                                    className="flex-1 resize-none bg-transparent outline-none text-lg placeholder:text-slate-400 py-2 h-[50px] overflow-hidden"
-                                    rows="1"
-                                />
-                                <Mic size={24} className="text-slate-400 cursor-pointer hover:text-slate-600" />
-                                <button 
-                                    type="submit"
-                                    disabled={!chatInput.trim() || isLoading}
-                                    className="bg-teal-700 text-white p-3 rounded-full hover:bg-teal-600 transition-colors disabled:opacity-50"
-                                >
-                                    {isLoading ? <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div> : <ArrowRight size={20} />}
-                                </button>
-                            </form>
-                        </div>
-                        
-                        <div className="px-6 py-4 bg-slate-50/50 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                            <div>
-                                <div className="text-sm font-bold text-slate-700">Lọc gợi ý</div>
-                                <div className="text-xs text-slate-500">Tùy chỉnh để kết quả phù hợp hơn</div>
-                            </div>
-                            <div className="flex gap-3">
-                                <div className="flex items-center bg-white border border-slate-200 rounded-lg px-3 py-1.5">
-                                    <span className="text-xs text-slate-500 mr-2">Độ tuổi</span>
-                                    <select 
-                                        value={age} 
-                                        onChange={(e) => setAge(e.target.value)}
-                                        className="text-sm font-semibold text-slate-800 bg-transparent outline-none cursor-pointer"
-                                    >
-                                        <option value="Dưới 10 tuổi">Dưới 10 tuổi</option>
-                                        <option value="10-12 tuổi">10-12 tuổi</option>
-                                        <option value="13-15 tuổi">13-15 tuổi</option>
-                                        <option value="16-18 tuổi">16-18 tuổi</option>
-                                    </select>
-                                </div>
-                                <div className="flex items-center bg-white border border-slate-200 rounded-lg px-3 py-1.5">
-                                    <span className="text-xs text-slate-500 mr-2">Trình độ đọc</span>
-                                    <select 
-                                        value={readingLevel} 
-                                        onChange={(e) => setReadingLevel(e.target.value)}
-                                        className="text-sm font-semibold text-slate-800 bg-transparent outline-none cursor-pointer"
-                                    >
-                                        <option value="Người mới bắt đầu">Người mới bắt đầu</option>
-                                        <option value="Đang làm quen">Đang làm quen</option>
-                                        <option value="Nâng cao">Nâng cao</option>
-                                    </select>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <div className="mt-6 flex flex-col items-center text-center">
-                        <div className="flex items-center gap-1.5 text-slate-700 font-semibold text-sm mb-1">
-                            <ShieldCheck size={16} className="text-teal-600" />
-                            Ẩn danh • Đã lọc nội dung theo độ tuổi
-                        </div>
-                        <p className="text-xs text-slate-500">
-                            Dữ liệu của bạn chỉ được dùng để gợi ý sách và sẽ không chia sẻ cho bên thứ ba.
-                        </p>
-                    </div>
-                </div>
-
-                {/* Results Area */}
-                {chatHistory.slice().reverse().map((msg, index) => {
-                    if (msg.type === 'user') return null; // We display the prompt inside the bot response
-                    
-                    const userPrompt = chatHistory[chatHistory.indexOf(msg) - 1]?.text || "...";
-                    const books = msg.data?.books || [];
-                    const cungGuBooks = books.filter(b => b.category?.toLowerCase().includes("cùng gu"));
-                    const moRongBooks = books.filter(b => !b.category?.toLowerCase().includes("cùng gu"));
-
-                    return (
-                        <div key={index} className="pt-8 border-t border-slate-200 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                            <div className="flex items-center gap-2 text-teal-700 font-bold text-xs uppercase tracking-wider mb-2">
-                                <Sparkles size={16} /> Gợi ý dành riêng cho bạn
-                            </div>
-                            <div className="flex justify-between items-start mb-6">
-                                <div>
-                                    <h2 className="text-2xl font-bold text-slate-900 mb-2">Danh sách cân bằng</h2>
-                                    <p className="text-sm text-slate-600 mb-1">Dựa trên mong muốn: <strong>"{userPrompt}"</strong></p>
-                                    <p className="text-sm text-slate-600 flex items-center gap-2">
-                                        <MessageSquare size={14} className="text-teal-600" /> 
-                                        Mình đã cân bằng các lựa chọn quen thuộc với một vài cuốn sách mới để bạn khám phá.
-                                    </p>
-                                </div>
-                                <div className="hidden sm:flex bg-teal-50 border border-teal-100 rounded-lg px-4 py-2 font-bold text-teal-800 text-sm gap-4">
-                                    <span>50% cùng gu</span>
-                                    <span className="text-teal-300">|</span>
-                                    <span>50% mở rộng</span>
-                                </div>
-                            </div>
-
-                            <div className="grid md:grid-cols-2 gap-8">
-                                {/* Cùng Gu Column */}
-                                <div>
-                                    <div className="flex justify-between items-end border-b border-slate-200 pb-3 mb-4">
-                                        <div className="flex items-center gap-3">
-                                            <div className="bg-blue-50 text-blue-600 p-2 rounded-lg"><BookOpen size={20} /></div>
-                                            <div>
-                                                <h3 className="font-bold text-lg text-slate-800">Cùng gu</h3>
-                                                <p className="text-xs text-slate-500">Những cuốn bạn có thể bắt đầu ngay</p>
-                                            </div>
-                                        </div>
-                                        <span className="text-sm font-bold text-slate-400">0{cungGuBooks.length}</span>
-                                    </div>
-                                    <div className="space-y-4">
-                                        {cungGuBooks.map((book, idx) => (
-                                            <BookCard key={idx} book={book} batchId={msg.id} feedback={msg.feedback} />
-                                        ))}
-                                    </div>
-                                </div>
-
-                                {/* Mở Rộng Column */}
-                                <div>
-                                    <div className="flex justify-between items-end border-b border-slate-200 pb-3 mb-4">
-                                        <div className="flex items-center gap-3">
-                                            <div className="bg-emerald-50 text-emerald-600 p-2 rounded-lg"><Compass size={20} /></div>
-                                            <div>
-                                                <h3 className="font-bold text-lg text-slate-800">Mở rộng</h3>
-                                                <p className="text-xs text-slate-500">Gợi ý để thử một điều mới</p>
-                                            </div>
-                                        </div>
-                                        <span className="text-sm font-bold text-slate-400">0{moRongBooks.length}</span>
-                                    </div>
-                                    <div className="space-y-4">
-                                        {moRongBooks.map((book, idx) => (
-                                            <BookCard key={idx} book={book} batchId={msg.id} feedback={msg.feedback} />
-                                        ))}
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    );
-                })}
-            </main>
-
-            {/* History Modal */}
-            {showHistoryModal && (
-                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
-                    <div className="bg-white w-full max-w-2xl rounded-2xl shadow-xl flex flex-col max-h-[85vh]">
-                        <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50 rounded-t-2xl">
-                            <h2 className="font-bold text-lg text-teal-900 flex items-center gap-2">
-                                <History size={20} /> Lịch sử đọc & Gợi ý
-                            </h2>
-                            <button onClick={() => setShowHistoryModal(false)} className="text-slate-400 hover:text-slate-700 p-1">
-                                <X size={24} />
-                            </button>
-                        </div>
-                        
-                        <div className="p-4 overflow-y-auto flex-1">
-                            {savedHistory.length === 0 ? (
-                                <div className="text-center py-10 text-slate-500">
-                                    <Book size={48} className="mx-auto mb-3 opacity-20" />
-                                    <p>Chưa có dữ liệu lịch sử nào.</p>
-                                </div>
-                            ) : (
-                                <div className="space-y-6">
-                                    {savedHistory.map((item, index) => (
-                                        <div key={item.id || index} className="border-b border-slate-100 pb-6 last:border-0">
-                                            <div className="text-sm font-medium text-slate-700 mb-2 bg-slate-100 p-2 rounded-md inline-block">
-                                                Yêu cầu: "{item.prompt}"
-                                            </div>
-                                            <div className="grid gap-2 mt-3 text-sm">
-                                                {item.books?.map((book, bIdx) => (
-                                                    <div key={bIdx} className="bg-white border border-slate-200 rounded-lg p-3">
-                                                        <span className="font-semibold text-teal-900">{book.title}</span> 
-                                                        <span className="text-slate-500"> - {book.author}</span>
-                                                        <span className="ml-2 text-xs bg-slate-100 px-2 py-0.5 rounded text-slate-500">{book.category}</span>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-                        
-                        <div className="p-4 border-t border-slate-100 bg-slate-50 rounded-b-2xl flex justify-between items-center">
-                            <p className="text-xs text-slate-500 max-w-[60%]">Dữ liệu của bạn chỉ được lưu nội bộ để tiện xem lại.</p>
-                            <button 
-                                onClick={handleClearHistory}
-                                disabled={savedHistory.length === 0}
-                                className="flex items-center gap-1.5 px-4 py-2 bg-red-50 text-red-600 hover:bg-red-100 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
-                            >
-                                <Trash2 size={16} /> Xóa dữ liệu
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
-        </div>
-    );
-}
-
-// Sub-component for rendering a book card beautifully
-function BookCard({ book, batchId, feedback }) {
-    return (
-        <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow">
-            <h4 className="font-bold text-lg text-slate-800 mb-1">{book.title}</h4>
-            <p className="text-sm text-slate-500 mb-4">Tác giả: {book.author}</p>
-            
-            <div className="bg-slate-50 p-4 rounded-lg border border-slate-100 mb-4">
-                <div className="text-sm font-bold text-teal-800 mb-2">Tại sao cuốn này hợp với bạn?</div>
-                <ul className="space-y-1.5">
-                    {book.reasons?.map((reason, rIdx) => (
-                        <li key={rIdx} className="text-sm text-slate-700 flex items-start gap-2">
-                            <span className="text-teal-500 mt-0.5">•</span>
-                            <span>{reason}</span>
-                        </li>
-                    ))}
-                </ul>
+                <span>Trang Kế Tiếp</span>
             </div>
-            
-            <div className="flex items-center gap-3">
-                <button className="flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-green-600 bg-slate-50 hover:bg-green-50 px-3 py-1.5 rounded-full border border-slate-200 transition-colors">
-                    <ThumbsUp size={14} /> Hữu ích
-                </button>
-                <button className="flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-red-600 bg-slate-50 hover:bg-red-50 px-3 py-1.5 rounded-full border border-slate-200 transition-colors">
-                    <ThumbsDown size={14} /> Không phù hợp
-                </button>
-            </div>
+            <nav class="hidden md:flex gap-6 text-sm font-medium text-gray-300">
+                <a href="#" class="text-white border-b-2 border-accent pb-1">Khám phá</a>
+                <a href="#" class="hover:text-white transition">Lớp học</a>
+                <a href="#" class="hover:text-white transition">Cộng đồng</a>
+                <a href="#" class="hover:text-white transition">Hỗ trợ</a>
+            </nav>
         </div>
-    );
-}
+        
+        <div class="flex items-center gap-5 text-sm">
+            <i class="fa-solid fa-magnifying-glass text-gray-300 cursor-pointer hover:text-white"></i>
+            <span class="cursor-pointer text-gray-300 hover:text-white">Ngôn ngữ (VI)</span>
+            <span class="cursor-pointer text-gray-300 hover:text-white flex items-center gap-1" onclick="alert('Lịch sử đã được xóa theo yêu cầu của bạn.')">
+                <i class="fa-solid fa-clock-
